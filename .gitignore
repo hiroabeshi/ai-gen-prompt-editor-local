@@ -27,6 +27,7 @@ dist-ssr
 # Security and User specific files (Hide from Public GitHub)
 .env
 .env.*
+.claude/
 人間用/
 ai_planning/
 ai_import/
