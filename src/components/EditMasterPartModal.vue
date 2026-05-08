@@ -76,7 +76,7 @@
 import { ref, watch, computed, onMounted, nextTick } from 'vue'
 import { usePromptStore } from '../store/promptStore'
 import AutocompleteInput from './AutocompleteInput.vue'
-import { suggestByLabel, suggestByTag, type DictEntry } from '../utils/dictionaryService'
+import { normalizeTagForAnima, suggestByLabel, suggestByTag, type DictEntry } from '../utils/dictionaryService'
 import type { PromptPart } from '../types'
 
 const props = defineProps<{
@@ -137,6 +137,7 @@ watch(
 
 function saveMaster(): void {
   if (!masterPart.value) return
+  editAnima.value = normalizeTagForAnima(editAnima.value)
   store.updatePart(masterPart.value.id, {
     label: editLabel.value,
     categoryId: editCategoryId.value,
@@ -152,7 +153,7 @@ function onSuggestLabelSelect(entry: DictEntry): void {
 }
 
 function onSuggestTagSelect(entry: DictEntry): void {
-  editAnima.value = entry.tag
+  editAnima.value = normalizeTagForAnima(entry.tag)
   saveMaster()
 }
 

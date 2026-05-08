@@ -1,6 +1,7 @@
 import type { SelectedPart, PromptPart, Slot } from '../types'
 import { isRandomizerPartId, categoryIdFromRandomizer } from '../types'
 import { SECTION_IDS, type SectionId } from '../data/sections'
+import { normalizeAnimaTagForOutput, normalizeDatasetTag } from './animaTagNormalization'
 
 /**
  * 重み (Weight) を Anima / ComfyUI 記法 `(tag:1.2)` に変換する
@@ -20,7 +21,7 @@ function collectRandomizerTags(partId: string, library: PromptPart[]): string[] 
     const catId = categoryIdFromRandomizer(partId)
     const catParts = library.filter((p) => p.categoryId === catId)
     return catParts
-        .map((p) => p.values.anima.replace(/[\s,]+$/, '').trim())
+        .map((p) => normalizeAnimaTagForOutput(p.values.anima))
         .filter((t) => t !== '')
 }
 
@@ -86,14 +87,8 @@ function renderPart(
         tag = master ? master.values.anima : ''
     }
 
-    tag = tag.replace(/[\s,]+$/, '').trim()
+    tag = normalizeAnimaTagForOutput(tag, sectionId)
     if (!tag) return ''
-
-    // artist セクションは @ プレフィックス自動付与 (二重付与防止)
-    if (sectionId === 'artist') {
-        const stripped = tag.replace(/^@+/, '')
-        tag = `@${stripped}`
-    }
 
     return formatByWeight(tag, p.weight)
 }
@@ -131,6 +126,6 @@ export function generatePromptFromSlot(
     if (freeText) chunks.push(freeText)
 
     const body = chunks.join(', ')
-    const datasetTag = (slot.datasetTag ?? '').trim()
+    const datasetTag = normalizeDatasetTag(slot.datasetTag ?? '')
     return datasetTag ? `${datasetTag}\n${body}` : body
 }

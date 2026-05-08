@@ -14,7 +14,8 @@ import type {
     SelectedPart,
     Rating,
 } from '../types'
-import { resolveSection, type SectionId } from '../data/sections'
+import { resolveSectionForTag, type SectionId } from '../data/sections'
+import { normalizeAnimaTagForStorage, normalizeDatasetTag } from './animaTagNormalization'
 
 // ─── 定数: Boilerplate 除外 / レーティング / データセット ─────
 
@@ -222,7 +223,7 @@ function resolveDictionaryCategory(
     animaTag: string,
     existingCategories: Category[],
 ): string | null {
-    const key = animaTag.toLowerCase().replace(/\s+/g, '_')
+    const key = normalizeAnimaTagForStorage(animaTag).replace(/\s+/g, '_')
     const hit = DICT_LOOKUP.get(key)
     if (!hit) return null
     const catName = dict.categories[hit.categoryIndex]
@@ -243,23 +244,24 @@ function ensurePart(
     animaTag: string,
     forceCategoryId?: string,
 ): { id: string; categoryId: string } {
-    const existing = ctx.tagToPart.get(animaTag)
+    const normalizedTag = normalizeAnimaTagForStorage(animaTag)
+    const existing = ctx.tagToPart.get(normalizedTag)
     if (existing) return existing
 
     const categoryId =
         forceCategoryId ??
-        resolveDictionaryCategory(animaTag, ctx.existingCategories) ??
+        resolveDictionaryCategory(normalizedTag, ctx.existingCategories) ??
         'mc_unclassified'
 
     const id = uuidv4()
     const newPart: PromptPart = {
         id,
         categoryId,
-        label: animaTag,
-        values: { anima: animaTag },
+        label: normalizedTag,
+        values: { anima: normalizedTag },
     }
     ctx.newParts.push(newPart)
-    ctx.tagToPart.set(animaTag, { id, categoryId })
+    ctx.tagToPart.set(normalizedTag, { id, categoryId })
     return { id, categoryId }
 }
 
@@ -267,7 +269,7 @@ function sectionForTag(rawTag: string, categoryId: string): SectionId {
     if (YEAR_PATTERN.test(rawTag) || PERIOD_SET.has(rawTag.toLowerCase())) {
         return 'quality'
     }
-    return resolveSection(categoryId)
+    return resolveSectionForTag(categoryId, rawTag)
 }
 
 /**
@@ -301,8 +303,9 @@ function parsePromptToSlot(
     const firstNewline = text.indexOf('\n')
     if (firstNewline !== -1 && isPositive) {
         const firstLine = text.slice(0, firstNewline).trim()
-        if (DATASET_TAG_CANDIDATES.includes(firstLine)) {
-            datasetTag = firstLine
+        const normalizedDatasetTag = normalizeDatasetTag(firstLine)
+        if (DATASET_TAG_CANDIDATES.includes(normalizedDatasetTag)) {
+            datasetTag = normalizedDatasetTag
             body = text.slice(firstNewline + 1)
         }
     }
@@ -315,7 +318,9 @@ function parsePromptToSlot(
     for (const raw of rawTags) {
         const stripped = stripWeight(raw)
         if (!stripped) continue
-        const lower = stripped.toLowerCase()
+        const normalized = normalizeAnimaTagForStorage(stripped)
+        if (!normalized) continue
+        const lower = normalized.toLowerCase()
 
         // レーティング (positive のみ、最後に出たものを採用)
         if (isPositive && RATING_SET.has(lower)) {
@@ -324,8 +329,8 @@ function parsePromptToSlot(
         }
 
         // アーティストタグ (@ プレフィックス)
-        if (stripped.startsWith('@')) {
-            const bareTag = stripped.slice(1).trim()
+        if (normalized.startsWith('@')) {
+            const bareTag = normalized.slice(1).trim()
             if (!bareTag) continue
             const info =
                 ctx.tagToPart.get(bareTag) ??
@@ -342,13 +347,13 @@ function parsePromptToSlot(
 
         // Boilerplate 除外
         if (BOILERPLATE_SET.has(lower)) {
-            excluded.push(stripped)
+            excluded.push(normalized)
             continue
         }
 
         // 通常タグ: library / 辞書 で section を解決
-        const info = ctx.tagToPart.get(stripped) ?? ensurePart(ctx, stripped)
-        const sid = sectionForTag(stripped, info.categoryId)
+        const info = ctx.tagToPart.get(normalized) ?? ensurePart(ctx, normalized)
+        const sid = sectionForTag(normalized, info.categoryId)
         sections[sid].push({
             id: uuidv4(),
             partId: info.id,
@@ -407,7 +412,9 @@ export async function extractPNGMetadata(
     // 既存 library を anima タグで索引化
     const tagToPart = new Map<string, { id: string; categoryId: string }>()
     for (const p of existingLibrary) {
-        tagToPart.set(p.values.anima, { id: p.id, categoryId: p.categoryId })
+        const animaTag = normalizeAnimaTagForStorage(p.values.anima)
+        if (!animaTag) continue
+        tagToPart.set(animaTag, { id: p.id, categoryId: p.categoryId })
     }
     const ctx: ParseContext = {
         existingCategories,

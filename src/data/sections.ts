@@ -56,6 +56,18 @@ export function resolveSection(categoryId: string): SectionId {
     return CATEGORY_TO_SECTION[categoryId] ?? 'other'
 }
 
+/**
+ * categoryId とタグ表記からセクション ID を解決。
+ * `mc_copyright` は既存データ互換のためカテゴリとしては series 扱いだが、
+ * `character_name_(series)` 形式は character として扱う。
+ */
+export function resolveSectionForTag(categoryId: string, rawTag: string = ''): SectionId {
+    if (categoryId === 'mc_copyright' && /(?:^|[^\\])\\?\(/.test(rawTag)) {
+        return 'character'
+    }
+    return resolveSection(categoryId)
+}
+
 /** 空のセクション Record を生成する */
 export function emptySectionsRecord<T>(): Record<SectionId, T[]> {
     return {

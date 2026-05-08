@@ -8,8 +8,10 @@ import {
     SECTION_IDS,
     emptySectionsRecord,
     resolveSection,
+    resolveSectionForTag,
     type SectionId,
 } from '../data/sections'
+import { normalizeAnimaTagForStorage, normalizeDatasetTag } from '../utils/animaTagNormalization'
 
 type SlotKind = 'positive' | 'negative'
 
@@ -82,7 +84,10 @@ export const usePromptStore = defineStore('prompt', () => {
     function initFromData(state: AppState): void {
         version.value = state.version
         categories.value = state.categories.map((c) => ({ ...c }))
-        library.value = state.library.map((p) => ({ ...p, values: { ...p.values } }))
+        library.value = state.library.map((p) => ({
+            ...p,
+            values: { ...p.values, anima: normalizeAnimaTagForStorage(p.values.anima) },
+        }))
         positive.value = cloneSlot(state.positive)
         negative.value = cloneSlot(state.negative)
         loadCount.value++
@@ -134,7 +139,7 @@ export const usePromptStore = defineStore('prompt', () => {
             id: uuidv4(),
             categoryId,
             label,
-            values: { anima },
+            values: { anima: normalizeAnimaTagForStorage(anima) },
         }
         library.value.push(part)
         return part
@@ -146,7 +151,14 @@ export const usePromptStore = defineStore('prompt', () => {
         if (changes.label !== undefined) part.label = changes.label
         if (changes.categoryId !== undefined) part.categoryId = changes.categoryId
         if (changes.values) {
-            part.values = { ...part.values, ...changes.values }
+            part.values = {
+                ...part.values,
+                ...changes.values,
+                anima:
+                    changes.values.anima !== undefined
+                        ? normalizeAnimaTagForStorage(changes.values.anima)
+                        : part.values.anima,
+            }
         }
     }
 
@@ -173,7 +185,7 @@ export const usePromptStore = defineStore('prompt', () => {
     }
 
     function setDatasetTag(tag: string): void {
-        positive.value.datasetTag = tag
+        positive.value.datasetTag = normalizeDatasetTag(tag)
     }
 
     function setRating(rating: Rating | null): void {
@@ -203,7 +215,7 @@ export const usePromptStore = defineStore('prompt', () => {
         } else {
             const master = library.value.find((p) => p.id === partId)
             if (!master) return undefined
-            resolvedSection = resolveSection(master.categoryId)
+            resolvedSection = resolveSectionForTag(master.categoryId, master.values.anima)
         }
 
         const inst: SelectedPart = {
@@ -311,7 +323,12 @@ export const usePromptStore = defineStore('prompt', () => {
         rating?: Rating | null
     }): void {
         categories.value.push(...payload.newCategories)
-        library.value.push(...payload.newParts)
+        library.value.push(
+            ...payload.newParts.map((p) => ({
+                ...p,
+                values: { ...p.values, anima: normalizeAnimaTagForStorage(p.values.anima) },
+            })),
+        )
 
         for (const sid of SECTION_IDS) {
             positive.value.sections[sid].push(...payload.positive[sid])
@@ -329,7 +346,7 @@ export const usePromptStore = defineStore('prompt', () => {
                 : payload.negativeFreeText
         }
         if (payload.datasetTag) {
-            positive.value.datasetTag = payload.datasetTag
+            positive.value.datasetTag = normalizeDatasetTag(payload.datasetTag)
         }
         if (payload.rating !== undefined && payload.rating !== null) {
             positive.value.rating = payload.rating

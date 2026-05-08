@@ -7,7 +7,8 @@ import type {
     SelectedPart,
     Rating,
 } from '../types'
-import { resolveSection, type SectionId } from '../data/sections'
+import { resolveSectionForTag, SECTION_IDS, type SectionId } from '../data/sections'
+import { normalizeAnimaTagForStorage, normalizeDatasetTag } from './animaTagNormalization'
 
 /**
  * AI インポート JSON テキストをパースして検証する
@@ -49,6 +50,10 @@ function emptySectioned(): SectionedParts {
     }
 }
 
+function isSectionId(value: unknown): value is SectionId {
+    return typeof value === 'string' && (SECTION_IDS as readonly string[]).includes(value)
+}
+
 export type AIImportMergeResult = {
     newCategories: Category[]
     newParts: PromptPart[]
@@ -80,7 +85,9 @@ export function mergeAIImport(
     // anima タグ → { id, categoryId } の対応表
     const partTagToInfoMap = new Map<string, { id: string; categoryId: string }>()
     for (const existing of existingLibrary) {
-        partTagToInfoMap.set(existing.values.anima, {
+        const animaTag = normalizeAnimaTagForStorage(existing.values.anima)
+        if (!animaTag) continue
+        partTagToInfoMap.set(animaTag, {
             id: existing.id,
             categoryId: existing.categoryId,
         })
@@ -107,7 +114,8 @@ export function mergeAIImport(
         }
 
         for (const importPart of importCat.parts) {
-            const animaTag = importPart.values.anima
+            const animaTag = normalizeAnimaTagForStorage(importPart.values.anima)
+            if (!animaTag) continue
 
             const duplicate = partTagToInfoMap.get(animaTag)
             if (duplicate) {
@@ -138,7 +146,7 @@ export function mergeAIImport(
         const dest = importSlot.type === 'positive' ? positive : negative
 
         if (importSlot.type === 'positive') {
-            if (importSlot.datasetTag) datasetTag = importSlot.datasetTag
+            if (importSlot.datasetTag) datasetTag = normalizeDatasetTag(importSlot.datasetTag)
             if (importSlot.rating !== undefined) rating = importSlot.rating ?? null
             if (importSlot.freeText) {
                 positiveFreeText = positiveFreeText
@@ -152,9 +160,13 @@ export function mergeAIImport(
         }
 
         for (const part of importSlot.parts) {
-            const info = partTagToInfoMap.get(part.values.anima)
+            const animaTag = normalizeAnimaTagForStorage(part.values.anima)
+            if (!animaTag) continue
+            const info = partTagToInfoMap.get(animaTag)
             if (!info) continue
-            const sid: SectionId = part.section ?? resolveSection(info.categoryId)
+            const sid: SectionId = isSectionId(part.section)
+                ? part.section
+                : resolveSectionForTag(info.categoryId, animaTag)
             dest[sid].push({
                 id: uuidv4(),
                 partId: info.id,

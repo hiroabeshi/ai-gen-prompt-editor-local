@@ -5,7 +5,7 @@
       class="field-input"
       :placeholder="placeholder"
       @input="onInput"
-      @focus="showDropdown = suggestions.length > 0"
+      @focus="openDropdown"
       @keydown.down.prevent="moveHighlight(1)"
       @keydown.up.prevent="moveHighlight(-1)"
       @keydown.enter.prevent="selectHighlighted"
@@ -14,7 +14,10 @@
       autocomplete="off"
     />
     <Transition name="dropdown">
-      <ul v-if="showDropdown && suggestions.length > 0" class="autocomplete-dropdown">
+      <ul
+        v-if="showDropdown && suggestions.length > 0"
+        :class="['autocomplete-dropdown', `autocomplete-dropdown--${dropdownDirection}`]"
+      >
         <li
           v-for="(item, i) in suggestions"
           :key="item.tag"
@@ -31,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { nextTick, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { DictEntry } from '../utils/dictionaryService'
 
 const props = defineProps<{
@@ -52,8 +55,10 @@ const suggestions = ref<DictEntry[]>([])
 const showDropdown = ref(false)
 const highlightIndex = ref(-1)
 const wrapRef = ref<HTMLElement>()
+const dropdownDirection = ref<'down' | 'up'>('down')
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+const DROPDOWN_MAX_HEIGHT = 260
 
 watch(() => props.modelValue, (v) => {
   if (v !== inputValue.value) inputValue.value = v
@@ -75,8 +80,31 @@ function onInput(): void {
     }
     suggestions.value = props.searchFn(q)
     highlightIndex.value = -1
-    showDropdown.value = suggestions.value.length > 0
+    if (suggestions.value.length > 0) {
+      updateDropdownDirection()
+      showDropdown.value = true
+    } else {
+      showDropdown.value = false
+    }
   }, props.debounceMs ?? 250)
+}
+
+function updateDropdownDirection(): void {
+  const wrap = wrapRef.value
+  if (!wrap) return
+
+  const rect = wrap.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - rect.bottom
+  const spaceAbove = rect.top
+  dropdownDirection.value =
+    spaceBelow < DROPDOWN_MAX_HEIGHT + 16 && spaceAbove > spaceBelow ? 'up' : 'down'
+}
+
+async function openDropdown(): Promise<void> {
+  if (suggestions.value.length === 0) return
+  await nextTick()
+  updateDropdownDirection()
+  showDropdown.value = true
 }
 
 function moveHighlight(delta: number): void {
@@ -133,7 +161,6 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick))
 
 .autocomplete-dropdown {
   position: absolute;
-  top: calc(100% + 4px);
   left: 0;
   right: 0;
   max-height: 260px;
@@ -146,6 +173,14 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocClick))
   margin: 0;
   z-index: 100;
   box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+.autocomplete-dropdown--down {
+  top: calc(100% + 4px);
+}
+
+.autocomplete-dropdown--up {
+  bottom: calc(100% + 4px);
 }
 
 .autocomplete-item {

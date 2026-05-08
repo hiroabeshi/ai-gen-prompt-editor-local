@@ -4,11 +4,12 @@
 //  - values.novelai → values.anima にキー移動
 //  - values.sd は破棄
 //  - slots[] を positive / negative の 2 スロットに統合
-//  - 各パーツを categoryId から CATEGORY_TO_SECTION で section に振り分け
+//  - 各パーツを categoryId / tag から section に振り分け
 // ============================================================
 
 import type { AppState, Slot, SelectedPart } from '../../types'
-import { CATEGORY_TO_SECTION, emptySectionsRecord } from '../sections'
+import { emptySectionsRecord, resolveSectionForTag } from '../sections'
+import { normalizeAnimaTagForStorage } from '../../utils/animaTagNormalization'
 
 // ─── V1.x 系データ形状（マイグレーション入力用） ─────────────────
 
@@ -57,17 +58,17 @@ export function migrateV1ToV2(data: V1AppState): AppState {
         categoryId: p.categoryId,
         label: p.label,
         values: {
-            anima: p.values.anima ?? p.values.novelai ?? '',
+            anima: normalizeAnimaTagForStorage(p.values.anima ?? p.values.novelai ?? ''),
         },
     }))
 
-    const partCategoryMap = new Map<string, string>(
-        migratedLibrary.map((p) => [p.id, p.categoryId])
+    const partInfoMap = new Map<string, { categoryId: string; anima: string }>(
+        migratedLibrary.map((p) => [p.id, { categoryId: p.categoryId, anima: p.values.anima }])
     )
 
     // --- 2. slots を positive / negative に統合 ---
-    const positive = buildSlotFromV1Slots(data.slots, 'positive', partCategoryMap)
-    const negative = buildSlotFromV1Slots(data.slots, 'negative', partCategoryMap)
+    const positive = buildSlotFromV1Slots(data.slots, 'positive', partInfoMap)
+    const negative = buildSlotFromV1Slots(data.slots, 'negative', partInfoMap)
 
     return {
         version: '2.0.0',
@@ -84,15 +85,15 @@ export function migrateV1ToV2(data: V1AppState): AppState {
 function buildSlotFromV1Slots(
     slots: V1Slot[],
     type: 'positive' | 'negative',
-    partCategoryMap: Map<string, string>,
+    partInfoMap: Map<string, { categoryId: string; anima: string }>,
 ): Slot {
     const sections = emptySectionsRecord<SelectedPart>()
 
     for (const s of slots) {
         if (s.type !== type) continue
         for (const sp of s.parts) {
-            const catId = partCategoryMap.get(sp.partId) ?? ''
-            const sectionId = CATEGORY_TO_SECTION[catId] ?? 'other'
+            const info = partInfoMap.get(sp.partId)
+            const sectionId = info ? resolveSectionForTag(info.categoryId, info.anima) : 'other'
             sections[sectionId].push({
                 id: sp.id,
                 partId: sp.partId,
