@@ -1,11 +1,22 @@
 // ============================================================
 //  Anima プロンプトのセクション定義 (§11)
 // ============================================================
-//  - 各スロット (positive / negative) は固定 6 セクションで構成
+//  - 各スロット (positive / negative) は固定セクションで構成
 //  - カテゴリ ID → セクション ID のマッピングを保持
 // ============================================================
 
-export const SECTION_IDS = ['quality', 'people', 'character', 'series', 'artist', 'other'] as const
+export const SECTION_IDS = [
+    'quality',
+    'people',
+    'character',
+    'series',
+    'artist',
+    'style',
+    'camera',
+    'background',
+    'lighting',
+    'other',
+] as const
 export type SectionId = typeof SECTION_IDS[number]
 
 export const SECTION_LABELS: Record<SectionId, string> = {
@@ -14,7 +25,11 @@ export const SECTION_LABELS: Record<SectionId, string> = {
     character: 'キャラクター',
     series: 'シリーズ',
     artist: 'アーティスト',
-    other: 'その他 / 自然言語',
+    style: 'スタイル',
+    camera: 'カメラ・構図',
+    background: '背景',
+    lighting: 'ライティング',
+    other: 'その他',
 }
 
 /** defaultData.ts のカテゴリ ID → セクション ID マッピング */
@@ -25,7 +40,7 @@ export const CATEGORY_TO_SECTION: Record<string, SectionId> = {
     mc_artist: 'artist',
     mc_copyright: 'series',
     mc_people_gender: 'people',
-    mc_composition: 'other',
+    mc_composition: 'camera',
     mc_body_skin: 'other',
     mc_breast: 'other',
     mc_hair: 'other',
@@ -44,9 +59,9 @@ export const CATEGORY_TO_SECTION: Record<string, SectionId> = {
     mc_item: 'other',
     mc_kemonomimi: 'other',
     mc_monster: 'other',
-    mc_indoor_bg: 'other',
-    mc_outdoor: 'other',
-    mc_weather: 'other',
+    mc_indoor_bg: 'background',
+    mc_outdoor: 'background',
+    mc_weather: 'lighting',
     mc_effect: 'other',
     mc_nsfw: 'other',
 }
@@ -58,13 +73,10 @@ export function resolveSection(categoryId: string): SectionId {
 
 /**
  * categoryId とタグ表記からセクション ID を解決。
- * `mc_copyright` は既存データ互換のためカテゴリとしては series 扱いだが、
- * `character_name_(series)` 形式は character として扱う。
+ * 旧保存データ互換のため `character` セクション型は残すが、新規追加は series へ寄せる。
  */
 export function resolveSectionForTag(categoryId: string, rawTag: string = ''): SectionId {
-    if (categoryId === 'mc_copyright' && /(?:^|[^\\])\\?\(/.test(rawTag)) {
-        return 'character'
-    }
+    void rawTag
     return resolveSection(categoryId)
 }
 
@@ -76,6 +88,10 @@ export function emptySectionsRecord<T>(): Record<SectionId, T[]> {
         character: [],
         series: [],
         artist: [],
+        style: [],
+        camera: [],
+        background: [],
+        lighting: [],
         other: [],
     }
 }

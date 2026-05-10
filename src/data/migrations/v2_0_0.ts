@@ -7,7 +7,7 @@
 //  - 各パーツを categoryId / tag から section に振り分け
 // ============================================================
 
-import type { AppState, Slot, SelectedPart } from '../../types'
+import type { AppState, CharacterPromptBlock, Slot, SelectedPart } from '../../types'
 import { emptySectionsRecord, resolveSectionForTag } from '../sections'
 import { normalizeAnimaTagForStorage } from '../../utils/animaTagNormalization'
 
@@ -45,6 +45,24 @@ export type V1AppState = {
     slots: V1Slot[]
 }
 
+function makeEmptyCharacter(index: number): CharacterPromptBlock {
+    return {
+        id: `character_${index}`,
+        label: `キャラ${index}`,
+        enabled: true,
+        role: '',
+        position: '',
+        customPosition: '',
+        character: [],
+        appearance: [],
+        outfit: [],
+        expression: [],
+        action: [],
+        item: [],
+        other: [],
+    }
+}
+
 // ─── マイグレーション本体 ───────────────────────────────────────
 
 /**
@@ -71,10 +89,12 @@ export function migrateV1ToV2(data: V1AppState): AppState {
     const negative = buildSlotFromV1Slots(data.slots, 'negative', partInfoMap)
 
     return {
-        version: '2.0.0',
+        version: '2.1.0',
         categories: data.categories.map((c) => ({ ...c })),
         library: migratedLibrary,
         positive,
+        characters: [makeEmptyCharacter(1), makeEmptyCharacter(2), makeEmptyCharacter(3)],
+        naturalLanguage: '',
         negative,
     }
 }

@@ -1,4 +1,4 @@
-import type { AppState, Slot } from '../types'
+import type { AppState, CharacterPromptBlock, Slot } from '../types'
 import { emptySectionsRecord } from './sections'
 
 function makeEmptySlot(type: 'positive' | 'negative'): Slot {
@@ -15,8 +15,26 @@ function makeEmptySlot(type: 'positive' | 'negative'): Slot {
     return base
 }
 
+function makeEmptyCharacter(index: number): CharacterPromptBlock {
+    return {
+        id: `character_${index}`,
+        label: `キャラ${index}`,
+        enabled: true,
+        role: '',
+        position: '',
+        customPosition: '',
+        character: [],
+        appearance: [],
+        outfit: [],
+        expression: [],
+        action: [],
+        item: [],
+        other: [],
+    }
+}
+
 export const defaultData: AppState = {
-    version: '2.0.0',
+    version: '2.1.0',
     categories: [
         // §9.3 決定: NovelAI 時代の categories は維持（CATEGORY_TO_SECTION マッピングが依存）
         { id: 'mc_unclassified', name: '未分類', color: '#808080' },
@@ -53,5 +71,7 @@ export const defaultData: AppState = {
     // §9.3 決定: 初期 library は空。ユーザーが Anima 準拠のパーツを手作業で投入する。
     library: [],
     positive: makeEmptySlot('positive'),
+    characters: [makeEmptyCharacter(1), makeEmptyCharacter(2), makeEmptyCharacter(3)],
+    naturalLanguage: '',
     negative: makeEmptySlot('negative'),
 }

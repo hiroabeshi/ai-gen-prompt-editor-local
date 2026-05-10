@@ -2,7 +2,7 @@
   <div class="modal-overlay" @click.self="$emit('close')">
     <div class="modal">
       <div class="modal__header">
-        <span class="modal__title">スロットへパーツを追加</span>
+        <span class="modal__title">{{ title }}</span>
         <button class="icon-btn" @click="$emit('close')">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
         </button>
@@ -85,14 +85,17 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { usePromptStore } from '../store/promptStore'
-import type { PromptPart } from '../types'
+import type { CharacterFieldId, PromptPart } from '../types'
 import type { SectionId } from '../data/sections'
 import { randomizerPartId, isRandomizerPartId } from '../types'
 
 const props = defineProps<{
-  slotKind: 'positive' | 'negative'
+  slotKind?: 'positive' | 'negative'
   /** 明示的に追加先 section を指定したい場合。省略時は categoryId から自動解決。 */
   sectionId?: SectionId
+  characterId?: string
+  characterFieldId?: CharacterFieldId
+  title?: string
 }>()
 
 const emit = defineEmits<{
@@ -102,6 +105,8 @@ const emit = defineEmits<{
 
 const store = usePromptStore()
 const search = ref('')
+
+const title = computed(() => props.title ?? 'スロットへパーツを追加')
 
 const catParts = ref<Record<string, PromptPart[]>>({})
 
@@ -179,7 +184,11 @@ watch(search, (newVal) => {
 })
 
 function addPart(partId: string) {
-  store.addPartToSlot(props.slotKind, partId, props.sectionId)
+  if (props.characterId && props.characterFieldId) {
+    store.addPartToCharacter(props.characterId, props.characterFieldId, partId)
+  } else if (props.slotKind) {
+    store.addPartToSlot(props.slotKind, partId, props.sectionId)
+  }
   emit('added')
   emit('close')
 }

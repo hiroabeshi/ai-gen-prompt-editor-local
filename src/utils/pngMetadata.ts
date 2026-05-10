@@ -14,7 +14,7 @@ import type {
     SelectedPart,
     Rating,
 } from '../types'
-import { resolveSectionForTag, type SectionId } from '../data/sections'
+import { resolveSectionForTag, SECTION_IDS, type SectionId } from '../data/sections'
 import { normalizeAnimaTagForStorage, normalizeDatasetTag } from './animaTagNormalization'
 
 // ─── 定数: Boilerplate 除外 / レーティング / データセット ─────
@@ -72,14 +72,11 @@ export type PNGExtractResult = {
 }
 
 function emptySectioned(): SectionedParts {
-    return {
-        quality: [],
-        people: [],
-        character: [],
-        series: [],
-        artist: [],
-        other: [],
+    const result = {} as SectionedParts
+    for (const sid of SECTION_IDS) {
+        result[sid] = []
     }
+    return result
 }
 
 // ─── 辞書インデックス (タグ → カテゴリ名) ─────────────────

@@ -98,11 +98,26 @@ Lint:
 
 複数キャラクターの追従性を上げるには、キャラクターごとのタグを束ねるのが重要。
 
+UI の基本構成:
+
+```text
+メイン
+キャラ1〜X
+自然言語
+```
+
+メインは quality / safety / count / style / background / camera / lighting / artist など、画像全体にかかるタグだけを扱う。キャラ1〜X は position / appearance / outfit / expression / action / item / other を持つ。自然言語欄は 1 か所に集約し、キャラ同士の関係、左右、前後、視線、相互作用などを書く場所にする。
+
+メインやキャラ欄を自由テキスト化しすぎない。キャラ欄はタグや短い phrase の集合として扱い、最終 prompt では `Left girl: ...` のような scoped cluster へ変換する。
+
+キャラ1〜X はキャラ単位の `enabled` toggle を持つ。`enabled=false` のキャラは保存 JSON には残すが、final prompt の scoped cluster と count tag 自動生成からは除外する。
+
 推奨構造:
 
 ```ts
 type CharacterBlock = {
   character: string
+  enabled: boolean
   series?: string
   appearanceTags: string[]
   outfitTags: string[]
@@ -113,6 +128,18 @@ type CharacterBlock = {
 
 最終出力は Anima のタグ順に合わせるが、UI と保存形式ではキャラクター別に編集できるとよい。
 
+複数キャラ構図では、キャラ固有の outfit / action / item を単純に global general tag へ平坦化しない。最終 prompt では以下のような scoped cluster を使い、キャラごとの属性を見失わないようにする。
+
+```text
+Center man: black clothes, standing.
+Left girl: eating ice cream, ice cream, crying, tears, open mouth.
+Right girl: holding a net, net, smile.
+
+The two girls stand on either side of the man.
+```
+
+この scoped cluster は完全な英文でなくてよい。`crying`, `screaming`, `open mouth` のような状態・表情・動作タグを無理に流暢な英文へ変換すると意味を壊しやすいため、キャラ別の半タグ半自然文として保持する。
+
 ## 8. Artist は `@` を UI 上でも明示する
 
 公式では artist tag に `@` が必要。PromptEdit では以下を行う。
@@ -121,6 +148,7 @@ type CharacterBlock = {
 - 入力が `big chungus` でも出力は `@big chungus` にする。
 - `@` なしで保存された既存データは出力時に補正する。
 - negative の `artist name` は artist セクションとは別扱いにする。
+- ComfyUI / Forge Neo 向け final prompt では、artist tag などに含まれるリテラルな括弧を `\(name\)` のように escape する。未 escape の `()` は weight 構文として解釈される可能性がある。
 
 ## 9. Danbooru / Gelbooru 表記ゆれを alias で吸収する
 
@@ -155,6 +183,36 @@ Anima 公式仕様には weight 構文の明記がない。ComfyUI 向け出力�
 - ComfyUI adapter: `(tag:1.2)`
 - Anima spec document では「重み仕様あり」と断定しない。
 
+複数キャラ構図では、キャラ固有 action / item の weight を裸の global tag として出すと他キャラへ漏れる可能性がある。
+
+避ける例:
+
+```text
+(eating ice cream:1.25)
+```
+
+代替:
+
+```text
+Left girl: (eating ice cream:1.15), ice cream.
+```
+
+キャラ別 scoped cluster 内の weight は、global tag に出すよりもキャラへ寄る可能性が高い。
+
+```text
+Left girl: eating ice cream, ice cream, crying, screaming, (tears:1.5), open mouth.
+```
+
+または:
+
+```text
+(left girl eating ice cream:1.15)
+```
+
+ただし scoped phrase でも完全な拘束は保証できないため、lint warning と final prompt preview で明示する。行動系の強調は「注目度」と「動作量・見た目の変更」が混ざりやすいので、プログラムが `clearly eating` のような自然文へ勝手に言い換えない。
+
+通常 UI の weight 範囲は控えめにし、極端な値は詳細設定または直接入力扱いにする。
+
 ## 12. Randomizer はクライアント側で展開する
 
 Anima モデル自体に prompt randomizer 構文はない。NovelAI 由来の `||a|b||` のような記法をそのまま出すとモデルに無意味な文字列として渡る可能性がある。
@@ -175,9 +233,13 @@ PromptEdit の lint で警告したいもの:
 - safety tag が複数ある。
 - `year 2025` と `newest` などの時代タグが過剰に併用されている。
 - pure natural language が短すぎる。
-- character 名だけがあり appearance がない。
 - dataset tag が通常タグ列に混ざっている。
 - negative が長すぎる、または positive の主要意図を否定している。
+
+Character block の lint は以下だけに絞る。
+
+- キャラブロックに role がない。
+- キャラブロックに position がない。
 
 ## 14. Prompt preview は最終出力をそのまま見せる
 
@@ -190,6 +252,12 @@ PromptEdit の lint で警告したいもの:
 - セクション順に並んだ final prompt
 - backend adapter 適用後の final prompt
 - lint warnings
+
+複数キャラ構図では、特に以下を preview で確認できるようにする。
+
+- キャラ固有タグが global tag へ漏れていないか。
+- scoped cluster がどの文字列として出るか。
+- ComfyUI / Forge Neo adapter で括弧 escape と weight 構文がどう適用されるか。
 
 ## 15. PNG メタデータ取り込みはサンプルで実測する
 
@@ -211,3 +279,49 @@ Anima そのものの仕様と、ComfyUI が PNG に埋める workflow / prompt 
 4. character block。
 5. alias dictionary。
 6. PNG metadata import の実測対応。
+
+## 17. v2.0.0 JSON import
+
+`version: "2.0.0"` の既存 JSON を読み込む場合、既存 slot 内容は一括で `メイン` に移す。自然文らしい内容や `left girl` 風の疑似構文があっても、自動で `自然言語` や `キャラ1〜X` へ分配しない。
+
+明確な free text フィールドだけ `自然言語` に移す。明確な negative フィールドだけ `ネガティブ` に移す。それ以外の positive / slot 内容は `メイン` に集約する。
+
+読み込み時に、character block への手動分解を提案する warning は出さない。移行 import は判断を入れず、一括移動だけを行う。
+
+## 18. v2.1.0 JSON save format
+
+キャラブロック対応後の保存 JSON は `version: "2.1.0"` とする。
+
+`version: "2.0.0"` を読み込んだ場合も、保存時は `version: "2.1.0"` として新構造で出力する。
+
+保存構造の要点:
+
+- `main`: 画像全体にかかる positive パーツを保持する。
+- `characters`: キャラ1〜X の配列を保持する。
+- `naturalLanguage`: 関係 caption 用の自由テキストを保持する。
+- `negative`: negative パーツを保持する。
+
+`characters[]` は以下を持つ。
+
+```ts
+type CharacterBlock = {
+  id: string
+  label: string
+  enabled: boolean
+  role: string
+  position: 'left' | 'center' | 'right' | 'foreground' | 'background' | 'custom' | ''
+  customPosition?: string
+  appearance: SelectedPart[]
+  outfit: SelectedPart[]
+  expression: SelectedPart[]
+  action: SelectedPart[]
+  item: SelectedPart[]
+  other: SelectedPart[]
+}
+```
+
+`naturalLanguage` は文字列として保存する。キャラごとの scoped cluster に入る内容は `characters[]` 側に保存し、`naturalLanguage` へ混ぜない。
+
+`enabled=false` の character も保存する。出力時だけ対象から外し、後で 3 キャラ構図から 2 キャラ構図へ切り替えるような試行をしやすくする。
+
+v2.1.0 保存時は、final prompt 文字列そのものを正本として保存しない。final prompt は `main` / `characters` / `naturalLanguage` / `negative` から生成する preview / export 結果として扱う。

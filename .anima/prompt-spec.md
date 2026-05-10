@@ -230,3 +230,4 @@ PromptEdit 側:
 - 出力先が ComfyUI の場合は `(tag:1.2)` 形式を使う。
 - モデル仕様メモではなく backend adapter の責務として扱う。
 - 重みは過度に上げず、UI では実用範囲を制限する。
+- ComfyUI / Forge Neo 向け出力では、artist tag や character tag に含まれるリテラルな括弧を `\(name\)` のように escape する。未 escape の `()` は weight 構文として解釈される可能性がある。

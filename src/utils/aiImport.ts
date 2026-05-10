@@ -40,14 +40,11 @@ export function parseAIImportText(text: string): AIImportData {
 export type SectionedParts = Record<SectionId, SelectedPart[]>
 
 function emptySectioned(): SectionedParts {
-    return {
-        quality: [],
-        people: [],
-        character: [],
-        series: [],
-        artist: [],
-        other: [],
+    const result = {} as SectionedParts
+    for (const sid of SECTION_IDS) {
+        result[sid] = []
     }
+    return result
 }
 
 function isSectionId(value: unknown): value is SectionId {

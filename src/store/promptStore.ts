@@ -1,8 +1,23 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
-import type { AppState, Category, PromptPart, SelectedPart, Slot, Rating } from '../types'
-import { DEFAULT_PART_WEIGHT, isRandomizerPartId, randomizerPartId, categoryIdFromRandomizer } from '../types'
+import type {
+    AppState,
+    Category,
+    CharacterFieldId,
+    CharacterPromptBlock,
+    PromptPart,
+    SelectedPart,
+    Slot,
+    Rating,
+} from '../types'
+import {
+    CHARACTER_FIELD_IDS,
+    DEFAULT_PART_WEIGHT,
+    isRandomizerPartId,
+    randomizerPartId,
+    categoryIdFromRandomizer,
+} from '../types'
 import { defaultData } from '../data/defaultData'
 import {
     SECTION_IDS,
@@ -33,12 +48,51 @@ function cloneSlot(s: Slot): Slot {
     return base
 }
 
+function cloneCharacter(c: CharacterPromptBlock): CharacterPromptBlock {
+    const cloned: CharacterPromptBlock = {
+        id: c.id,
+        label: c.label,
+        enabled: c.enabled ?? true,
+        role: c.role ?? '',
+        position: c.position ?? '',
+        customPosition: c.customPosition ?? '',
+        character: (c.character ?? []).map((p) => ({ ...p })),
+        appearance: (c.appearance ?? []).map((p) => ({ ...p })),
+        outfit: (c.outfit ?? []).map((p) => ({ ...p })),
+        expression: (c.expression ?? []).map((p) => ({ ...p })),
+        action: (c.action ?? []).map((p) => ({ ...p })),
+        item: (c.item ?? []).map((p) => ({ ...p })),
+        other: (c.other ?? []).map((p) => ({ ...p })),
+    }
+    return cloned
+}
+
+function makeEmptyCharacter(index: number): CharacterPromptBlock {
+    return {
+        id: uuidv4(),
+        label: `キャラ${index}`,
+        enabled: true,
+        role: '',
+        position: '',
+        customPosition: '',
+        character: [],
+        appearance: [],
+        outfit: [],
+        expression: [],
+        action: [],
+        item: [],
+        other: [],
+    }
+}
+
 export const usePromptStore = defineStore('prompt', () => {
     // ─── State ───────────────────────────────────────────────
     const version = ref<string>(defaultData.version)
     const categories = ref<Category[]>([...defaultData.categories])
     const library = ref<PromptPart[]>([...defaultData.library])
     const positive = ref<Slot>(cloneSlot(defaultData.positive))
+    const characters = ref<CharacterPromptBlock[]>(defaultData.characters.map(cloneCharacter))
+    const naturalLanguage = ref<string>(defaultData.naturalLanguage)
     const negative = ref<Slot>(cloneSlot(defaultData.negative))
     const loadCount = ref<number>(0)
 
@@ -89,6 +143,8 @@ export const usePromptStore = defineStore('prompt', () => {
             values: { ...p.values, anima: normalizeAnimaTagForStorage(p.values.anima) },
         }))
         positive.value = cloneSlot(state.positive)
+        characters.value = state.characters.map(cloneCharacter)
+        naturalLanguage.value = state.naturalLanguage ?? ''
         negative.value = cloneSlot(state.negative)
         loadCount.value++
     }
@@ -99,6 +155,8 @@ export const usePromptStore = defineStore('prompt', () => {
             categories: categories.value.map((c) => ({ ...c })),
             library: library.value.map((p) => ({ ...p, values: { ...p.values } })),
             positive: cloneSlot(positive.value),
+            characters: characters.value.map(cloneCharacter),
+            naturalLanguage: naturalLanguage.value,
             negative: cloneSlot(negative.value),
         }
     }
@@ -190,6 +248,136 @@ export const usePromptStore = defineStore('prompt', () => {
 
     function setRating(rating: Rating | null): void {
         positive.value.rating = rating
+    }
+
+    // ─── Actions: キャラブロック ──────────────────────────────
+    function setNaturalLanguage(text: string): void {
+        naturalLanguage.value = text
+    }
+
+    function findCharacter(characterId: string): CharacterPromptBlock | undefined {
+        return characters.value.find((c) => c.id === characterId)
+    }
+
+    function addCharacter(): CharacterPromptBlock {
+        const character = makeEmptyCharacter(characters.value.length + 1)
+        characters.value.push(character)
+        return character
+    }
+
+    function removeCharacter(characterId: string): void {
+        characters.value = characters.value.filter((c) => c.id !== characterId)
+        characters.value.forEach((c, index) => {
+            if (/^キャラ\d+$/.test(c.label)) c.label = `キャラ${index + 1}`
+        })
+    }
+
+    function updateCharacter(
+        characterId: string,
+        changes: Partial<Omit<CharacterPromptBlock, CharacterFieldId>>,
+    ): void {
+        const character = findCharacter(characterId)
+        if (!character) return
+        Object.assign(character, changes)
+    }
+
+    function addPartToCharacter(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        partId: string,
+        insertIndex?: number,
+    ): SelectedPart | undefined {
+        const character = findCharacter(characterId)
+        if (!character) return undefined
+        const inst: SelectedPart = {
+            id: uuidv4(),
+            partId,
+            weight: DEFAULT_PART_WEIGHT,
+            enabled: true,
+        }
+        const list = character[fieldId]
+        if (insertIndex !== undefined && insertIndex >= 0 && insertIndex <= list.length) {
+            list.splice(insertIndex, 0, inst)
+        } else {
+            list.push(inst)
+        }
+        return inst
+    }
+
+    function findCharacterPart(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        instanceId: string,
+    ): SelectedPart | undefined {
+        return findCharacter(characterId)?.[fieldId].find((p) => p.id === instanceId)
+    }
+
+    function toggleCharacterPart(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        instanceId: string,
+    ): void {
+        const part = findCharacterPart(characterId, fieldId, instanceId)
+        if (part) part.enabled = !part.enabled
+    }
+
+    function setCharacterPartWeight(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        instanceId: string,
+        weight: number,
+    ): void {
+        const part = findCharacterPart(characterId, fieldId, instanceId)
+        if (part) part.weight = Math.round(weight * 100) / 100
+    }
+
+    function removeCharacterPart(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        instanceId: string,
+    ): void {
+        const character = findCharacter(characterId)
+        if (!character) return
+        character[fieldId] = character[fieldId].filter((p) => p.id !== instanceId)
+    }
+
+    function reorderCharacterFieldParts(
+        characterId: string,
+        fieldId: CharacterFieldId,
+        newParts: SelectedPart[],
+    ): void {
+        const character = findCharacter(characterId)
+        if (!character) return
+        const newIds = new Set(newParts.map((p) => p.id))
+        for (const otherCharacter of characters.value) {
+            for (const fid of CHARACTER_FIELD_IDS) {
+                if (otherCharacter.id === characterId && fid === fieldId) continue
+                const list = otherCharacter[fid]
+                if (list.some((p) => newIds.has(p.id))) {
+                    otherCharacter[fid] = list.filter((p) => !newIds.has(p.id))
+                }
+            }
+        }
+        character[fieldId] = newParts
+    }
+
+    function dedupeCharacterInstances(): void {
+        const seen = new Set<string>()
+        for (const character of characters.value) {
+            for (const fid of CHARACTER_FIELD_IDS) {
+                const next: SelectedPart[] = []
+                let changed = false
+                for (const part of character[fid]) {
+                    if (seen.has(part.id)) {
+                        changed = true
+                        continue
+                    }
+                    seen.add(part.id)
+                    next.push(part)
+                }
+                if (changed) character[fid] = next
+            }
+        }
     }
 
     // ─── Actions: スロット内パーツ ────────────────────────────
@@ -336,8 +524,8 @@ export const usePromptStore = defineStore('prompt', () => {
         }
 
         if (payload.positiveFreeText) {
-            positive.value.freeText = positive.value.freeText
-                ? `${positive.value.freeText}\n${payload.positiveFreeText}`
+            naturalLanguage.value = naturalLanguage.value
+                ? `${naturalLanguage.value}\n${payload.positiveFreeText}`
                 : payload.positiveFreeText
         }
         if (payload.negativeFreeText) {
@@ -359,6 +547,8 @@ export const usePromptStore = defineStore('prompt', () => {
         categories,
         library,
         positive,
+        characters,
+        naturalLanguage,
         negative,
         loadCount,
         // getters
@@ -380,6 +570,16 @@ export const usePromptStore = defineStore('prompt', () => {
         setFreeText,
         setDatasetTag,
         setRating,
+        setNaturalLanguage,
+        addCharacter,
+        removeCharacter,
+        updateCharacter,
+        addPartToCharacter,
+        toggleCharacterPart,
+        setCharacterPartWeight,
+        removeCharacterPart,
+        reorderCharacterFieldParts,
+        dedupeCharacterInstances,
         addPartToSlot,
         togglePart,
         setPartWeight,
