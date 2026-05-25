@@ -115,6 +115,12 @@ function dedupePreserveOrder(tags: string[]): string[] {
     return result
 }
 
+function ensureTrailingPeriod(text: string): string {
+    const trimmed = text.trimEnd()
+    if (!trimmed) return ''
+    return /[.!?。！？]$/.test(trimmed) ? trimmed : `${trimmed}.`
+}
+
 function enabledCharacters(characters: CharacterPromptBlock[]): CharacterPromptBlock[] {
     return characters.filter((c) => c.enabled)
 }
@@ -284,7 +290,10 @@ export function generatePromptFromScene(
 
     const body = chunks.join(', ')
     const datasetTag = normalizeDatasetTag(mainSlot.datasetTag ?? '')
-    const globalPrompt = datasetTag ? (body ? `${datasetTag}\n${body}` : datasetTag) : body
+    const mainPrompt = ensureTrailingPeriod(body)
+    const globalPrompt = datasetTag
+        ? (mainPrompt ? `${datasetTag}\n${mainPrompt}` : datasetTag)
+        : mainPrompt
 
     const clusters = characters
         .map((character, index) =>
